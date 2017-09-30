@@ -1,2 +1,2 @@
-# retrieveBouncedBackEmail
-Servicenow code to retrieve the list of emails on bounced emails
+# servicenow Scripts
+Servicenow code to execute operations using background scripts or schedule jobs
