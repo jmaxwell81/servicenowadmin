@@ -16,3 +16,5 @@ setDisplayTime.js - set the display Value based on a timezone
 setUserNotificationbyEmail.js - set the notifications to enable or disable on the email list provided
 
 validateaccess.js - it will validate if a user has read/write access to a record
+
+DateTimeUTCconverter.js - it contains a library to help to convert time between timezones
