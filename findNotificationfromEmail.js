@@ -42,7 +42,7 @@ function findNotificationfromEmail(vemailsysid, vid) {
             var gr2 = new GlideRecord('sysevent_email_action');
             gr2.get(gr1.notification);
             if (gr2.isValid()) {
-                var vtemplate = "-" + vid + "." + r + "- It was triggered by\n**Notification '%1' on %2 %3 (Updated by %4 %5, Created by %6 %7 active: %8 weight: %9 sys_version:%10)**\n-- %11\n\n\n```\nCondition: %12\nSend to event creator: %13\nExclude Delegates: %14\nUsers: %15\nUsers/Groups in fields: %15\nGroups: %17\nSubscribable: %18\n```\n\n\n";
+                var vtemplate = "-" + vid + "." + r + "- It was triggered by\n**Notification '%1' on %2 %3 (Updated by %4 %5, Created by %6 %7 active: %8 weight: %9 sys_version:%10)**\n-- %11\n\n\n```\nCondition: %12\nSend to event creator: %13\nExclude Delegates: %14\nUsers: %15\nUsers/Groups in fields: %16\nGroups: %17\nSubscribable: %18\n```\n\n\n";
                 var vvalues = [gr2.name, gr2.collection, (gr2.generation_type == "engine") ? ("insert/update: " + gr2.action_insert + "/" + gr2.action_update) : (gr2.generation_type + ": " + gr2.event_name) , gr2.sys_updated_by, gr2.sys_updated_on.getDisplayValue(), gr2.sys_created_by, gr2.sys_created_on.getDisplayValue(), gr2.active, gr2.weight, gr2.sys_version, vurl + gr2.getTableName() + ".do?sys_id=" + gr2.sys_id, gr2.condition, gr2.send_self, gr2.exclude_delegates, gr2.recipient_users, gr2.recipient_fields, gr2.recipient_groups, gr2.subscribable];
                 vmessage.push(formatstring(vtemplate, vvalues));
             } else vmessage.push("Notification " + gr1.notification + " no accessible or does not exist");
@@ -52,7 +52,7 @@ function findNotificationfromEmail(vemailsysid, vid) {
 	  		
             var gr4 = new GlideRecord('cmn_notif_message');
             gr4.addQuery('notification',gr1.notification);
-            gr4.addEncodedQuery('notification_filterISNOTEMPTY^ORconditionISNOTEMPTY^ORscheduleISNOTEMPTY^ORdevice.active=false');
+            gr4.addEncodedQuery('notification_filterISNOTEMPTY^ORconditionISNOTEMPTY^ORscheduleISNOTEMPTY^ORdevice.active=false^ORdevice.email_addressISEMPTY^ORdevice.email_addressNOT LIKE@');
             gr4.setLimit(100);
             gr4.orderByDesc("sys_created_on");
             vmessage.push("^^^^^^^**cmn_notif_message Query:** " + vurl + 'cmn_notif_message_list.do?sysparm_query=' + escape(gr4.getEncodedQuery()) + "\n\n");
@@ -114,7 +114,7 @@ function findNotificationFromRecord(vtable, vsysid) {
     a.get(vsysid);
     if (a.isValid()) {
         vmessage.push("From record\n");
-        var b = [a.getDisplayValue(), a.sys_updated_by, a.sys_updated_on.getDisplayValue(), a.sys_created_by, a.sys_created_on.getDisplayValue(), f + vtable + ".do?sys_id=" + a.sys_id, a.sys_class_name];
+        var b = [a.getTableName(), a.sys_updated_by, a.sys_updated_on.getDisplayValue(), a.sys_created_by, a.sys_created_on.getDisplayValue(), f + vtable + ".do?sys_id=" + a.sys_id, a.sys_class_name];
         vmessage.push(formatstring("**%7 %1 (Updated by %2 %3, Created by %4 %5)**\n-- %6\n\n",b));
         
         
@@ -160,27 +160,46 @@ function findNotificationFromRecord(vtable, vsysid) {
     return vmessage
 };
 
-//
-// var duplicates_found1 = getDuplicates("sys_email", "subject,recipients", "type=sent^sys_created_onONLast 7 days@javascript:gs.beginningOfLast7Days()@javascript:gs.endOfLast7Days()");
+// 
+// var duplicates_found1 = getDuplicates("sys_email", "xxx,yyyy,subject,recipients", "type=sent^sys_created_onONLast 7 days@javascript:gs.beginningOfLast7Days()@javascript:gs.endOfLast7Days()");
 // gs.print("duplicates found: " + duplicates_found1.length + " \n" + duplicates_found1.join("\n"));
+// 
 function getDuplicates(vtable, vfield, vencodedquery) {
-    var vresults = [],
-        b = new GlideAggregate(vtable),
-        g = gs.getProperty("glide.servlet.uri");
-    vfield = vfield.split(",");
-    b.addEncodedQuery(vencodedquery);
-    b.addAggregate("COUNT", vfield[0]);
-    for (q = 0; q < vfield.length; q++) b.groupBy(vfield[q]);
-    b.addHaving("COUNT", ">", 1);
+    var vresult = [],
+        vcount = new GlideAggregate(vtable),
+        vurl = gs.getProperty("glide.servlet.uri");
+    gr = new GlideRecord(vtable);
 
-    for (r=1,b.query(); b.next();r++) {
-        var c = new GlideRecord(vtable);
-        c.addEncodedQuery(vencodedquery);
-        for (q = 0; q < vfield.length; q++) c.addQuery(vfield[q], b.getValue(vfield[q]));
-       
-        vresults.push("[" + b.getAggregate("COUNT", vfield[0]) + " duplicate found. Group " + r + "](" + g + vtable + "_list.do?sysparm_query=" + escape(c.getEncodedQuery()) + "&)")
+	// Validate the table
+    if (gr.isValid()) {
+        // Remove invalid fields
+        vfield = vfield.split(",");
+        vfield = vfield.filter(function(vfield) {
+            return gr.isValidField(vfield)
+        })
+        
+        if (0 < vfield.length) {
+            // Validate the encodedquery
+            vencodedquery && vcount.addEncodedQuery(vencodedquery);
+            
+            vcount.addAggregate("COUNT", vfield[0]);
+            for (q = 0; q < vfield.length; q++) vcount.groupBy(vfield[q]);
+            vcount.addHaving("COUNT", ">", 1);
+            
+            r = 1;
+            for (vcount.query(); vcount.next(); r++) {
+                var d = [];
+               
+                gr = new GlideRecord(vtable);
+                gr.addEncodedQuery(vencodedquery);
+                for (q = 0; q < vfield.length; q++) gr.addQuery(vfield[q], vcount.getValue(vfield[q]));
+                for (gr.query(); gr.next();)  d.push(gr.sys_id + "");
+               
+                vresult.push("[" + vcount.getAggregate("COUNT", vfield[0]) + " duplicate found. Group " + r + "](" + vurl + vtable + "_list.do?sysparm_query=sys_idIN" + d.join(",") + "&)")
+            }
+        }
     }
-    return vresults
+    return vresult
 };
 
 // Get the time in seconds 
